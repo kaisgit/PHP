@@ -1,0 +1,210 @@
+<?php
+require_once('/var/simplesaml/lib/_autoload.php');
+
+switch ($_SERVER['HTTP_HOST']) {
+	case 'localhost': 		$sso = new SimpleSAML_Auth_Simple('toolz');  break;
+	case 'localhost1':	$sso = new SimpleSAML_Auth_Simple('changeform');  break;
+}
+$sso->requireAuth();
+$attributes = $sso->getAttributes();
+?>
+<html>
+<title>Change Logging Form</title>
+<head>
+	<link rel="stylesheet" type="text/css" href="css/jquery-ui.css">
+	<link rel="stylesheet" type="text/css" href="css/jquery-datetimepicker.css">
+	<script type="text/javascript" src="lib/jquery.min.js"></script>
+	<script type="text/javascript" src="lib/jquery-ui.min.js"></script>
+	<script type="text/javascript" src="lib/jquery-datetimepicker.js"></script>
+	<script type="text/javascript" src="lib/forms.js"></script>
+<script>
+$(function() {
+	username = <?php echo json_encode($attributes['uid'][0]) ?>;
+	
+	//Forms fields are initiated here.
+	load_submitter(username);
+	load_service_field();
+	initiate_dates();
+	initiate_text_area(1000);
+	
+	//Load Assinged to Autocomplete
+	$("#f_assigned_to").autocomplete({
+		source: "lib/ldap_discovery.php",
+		minLength: 3,
+		select: function(event,ui){
+			$("#f_assigned_name").val(ui.item.displayname);
+			$("#f_assigned_phone").val(ui.item.telephonenumber);
+			$("#f_assigned_email").val(ui.item.mail);
+		},
+	});
+
+    $("#cso_response").buttonset();
+
+    $("#f_change_types").selectmenu();
+
+    $("#f_risk").selectmenu({
+    	change: function(){evaluate_priority()}
+    });
+
+    $("#f_impact").selectmenu({
+    	change: function(){evaluate_priority()}
+    });
+
+    $("#f_priority").selectmenu({ disabled: true });
+
+    $( document ).tooltip({
+		position: {my: "left+5 bottom", at: "center top"},
+		content:function(){
+			return this.getAttribute("title");
+		}
+	});
+
+	$("input[name=cso_response]:radio").change(function () {
+		evaluate_priority();
+	});
+
+	$( "form" ).submit(function( event ) {
+		event.preventDefault();
+		submit_form_data();
+	});
+});
+</script>
+</head>
+<body >
+<header style="opacity: 1;">
+	<div class="topheader">
+		<div class="logo"><img src="img/logo.png" alt="Logo"></div>
+		<div class="pagetitle">Change Logging Form</div>
+		<div class="toprightnav">
+			<ul>
+				<li>&nbsp;&nbsp;&nbsp; <a href="lib/dump.php">JSONdump</a> &nbsp;&nbsp;&nbsp;</li>
+				<li>&nbsp;&nbsp;&nbsp; <a href="lib/dump.php?format=csv">CSVdump</a> &nbsp;&nbsp;&nbsp;</li>
+				<li class="last">&nbsp;&nbsp;&nbsp;</li>
+			</ul>
+		</div>
+	</div>
+</header>
+<div class="bodycontainer">
+	<div class="container">
+		<form action="" method="post" id="form_change_request">
+			<div class="form_section">
+				<label for="f_service_name" class="very_bold">Service Name</label><br />
+				<input id="f_service_name" size="80" placeholder="Start typing your service name" />
+				<input id="f_service_id" type="hidden" />
+			</div>
+
+			<div class="form_section">
+				<label class="very_bold">Initiator</label>
+				<br />
+				<label for="f_assigner_name" class="label_icon"><img src="img/user.png"></label>
+				<input id="f_assigner_name" class="input_disabled" style="width:270px" disabled />&nbsp;
+
+				<label for="f_assigner_phone" class="label_icon"><img src="img/phone.png"></label>
+				<input id="f_assigner_phone" class="input_disabled" style="width:160px" disabled />&nbsp;
+
+				<label for="f_assigner_email" class="label_icon"><img src="img/mail.png"></label>
+				<input id="f_assigner_email"  class="input_disabled" style="width:210px" value="-" disabled />
+			</div>
+
+			<div class="form_section">
+				<label for="f_assigned_to" class="very_bold">Change Executor <a  title="Change Executor is the individual who will be implementing the change"><img src="img/info.png" style="width:15"></a></label>
+				<input id="f_assigned_to" size="80" placeholder="Type a name or username" />
+				<br />
+				<label for="f_assigned_name" class="label_icon"><img src="img/user.png"></label>
+				<input id="f_assigned_name" class="input_disabled" style="width:270px" disabled />&nbsp;
+
+				<label for="f_assigned_phone" class="label_icon"><img src="img/phone.png"></label>
+				<input id="f_assigned_phone"  class="input_disabled" style="width:160px" disabled />&nbsp;
+
+				<label for="f_assigned_email" class="label_icon"><img src="img/mail.png"></label>
+				<input id="f_assigned_email"  class="input_disabled" style="width:210px" disabled />
+			</div>
+
+
+			<div class="form_section">
+				<label class="very_bold">Implementation Start &amp; End Time (Local Time)</label>
+				<br />
+				<label for="f_start_time">Start: </label>
+				<input id="f_start_time" type="text" placeholder="Pick Start Time" />
+				<input id="f_start_time_unix" type="hidden" />
+				&#09;
+				<label for="f_end_time">End: </label>
+				<input id="f_end_time" type="text" placeholder="Pick End Time"/>
+				<input id="f_end_time_unix" type="hidden" />
+			</div>
+
+			<div class="form_section">
+				<div style="float:right;width:50%">
+					<label class="very_bold">Response to CSO? <a  title="This button aids in CSO tracking. <strong>YES</strong> is selected if the change being logged is in response to a CSO."><img src="img/info.png" style="width:15"></a></label>
+					<div id="cso_response">
+						<input type="radio" id="f_cso_yes" name="cso_response" value="yes"><label for="f_cso_yes">Yes</label>
+						<input type="radio" id="f_cso_no" name="cso_response" checked="checked" value="no"><label for="f_cso_no">No</label>
+					</div>
+				</div>
+
+				<div style="float:left; width:50%;">
+					<label class="very_bold" for="f_change_types">Change Types: <a  title="<strong>Application Maintenance</strong> changes refer to bug fixes, patches, etc., whether or not they are part of a scheduled activity or in response to an issue or incident.<br /><strong>Application Deployment</strong> changes refer to new applications (including products and services) and revisions to existing applications that have undergone the deployment life-cycle validation.<br /><strong>Infrastructure changes</strong> are those impacting the operating system, platform, or other underlying systems on which the deployed applications and services run.<br /><strong>Capacity changes</strong> refer to adjustments made in response to traffic spikes that might occur due to business volume, planned upgrades, and also capacity changes to storage, networking, or computing requirements.<br /><strong>Security changes</strong> are any changes made to either the infrastructure, application, or service that serves to harden the system by mitigating potential vulnerabilities or exposures that might result in a Security Critical System Outage (SCSO).<br /><strong>Database changes</strong> refer to any changes, whether scheduled or unscheduled, that are made to any Production database.<br /><strong>Third Party</strong> changes refer to changes being made by vendors, providers, partners, or other parties authorized to access Production systems."><img src="img/info.png" style="width:15"></a></label>
+					<br />
+					<select id="f_change_types" name="f_change_types" style="width:300px">
+						<option value="none">-- Select one --</option>
+						<option value="Application Maintenance">Application Maintenance</option>
+						<option value="Application Deployment">Application Deployment</option>
+						<option value="Infrastructure">Infrastructure</option>
+						<option value="Capacity">Capacity</option>
+						<option value="Security">Security</option>
+						<option value="Database">Database</option>
+						<option value="Third Party">Third Party</option>
+					</select>
+				</div>
+			</div>
+
+			<div class="form_section">
+
+				
+				<div style="float:left; width:30%">
+					<label class="very_bold" for="f_impact">Impact: <a  title="<strong>High:</strong> Likely to have impact.<br /><strong>Medium:</strong> Possible impact.<br /><strong>Low:</strong> Unlikely there will be any impact."><img src="img/info.png" style="width:15"></a></label>
+					<br />
+					<select id="f_impact" name="f_impact" style="width:80%">
+						<option value="high">High</option>
+						<option value="medium" selected="selected">Medium</option>
+						<option value="low">Low</option>
+					</select>
+				</div>
+
+				<div style="float:left; width:30%">
+					<label class="very_bold" for="f_risk">Risk: <a  title="<strong>High:</strong> Unavailable, long lasting impact, data loss<br /><strong>Medium: </strong>Service degradation, slow performance, no data loss<br /><strong>Low: </strong>Any impact should go unnoticed"><img src="img/info.png" style="width:15"></a></label>
+					<br />
+					<select id="f_risk" name="f_risk" style="width:80%">
+						<option value="high">High</option>
+						<option value="medium" selected="selected">Medium</option>
+						<option value="low">Low</option>
+					</select>
+				</div>
+
+				<div style="float:left; width:30%; display:none">
+					<label class="very_bold" for="f_priority">Priority: <a  title="nothing"><img src="img/info.png" style="width:15"></a></label>
+					<br />
+					<select id="f_priority" name="f_priority" style="width:80%">
+						<option value="normal" selected="selected">Normal</option>
+						<option value="urgent">Urgent</option>
+					</select>
+				</div>
+
+			</div>
+
+			<div class="form_section">
+				<label class="very_bold" for="f_change_desc">Description of Change:<a  title="nothing"><img src="img/info.png" style="width:15"></a></label>
+				<br />
+				<textarea id="f_change_desc" style="width:750px; height:150px"></textarea>
+				<div id="textarea_feedback"></div>
+			</div>
+
+			<div class="form_section">
+				<input id="submit_form" type="submit"/>
+			</div>
+
+		</form>
+	</div>
+</div>
+</body>
+</html>
